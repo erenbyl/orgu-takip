@@ -1,0 +1,1428 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Örgü Takip</title>
+<meta name="description" content="El işi projelerinizi sıra sıra, renk renk takip edin.">
+
+<meta name="theme-color" content="#faf7fc" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#14121f" media="(prefers-color-scheme: dark)">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Örgü Takip">
+
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%238b7fd1'/%3E%3Ctext x='50' y='70' font-size='60' text-anchor='middle'%3E%F0%9F%A7%B6%3C/text%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%238b7fd1'/%3E%3Ctext x='50' y='70' font-size='60' text-anchor='middle'%3E%F0%9F%A7%B6%3C/text%3E%3C/svg%3E">
+<link rel="manifest" id="manifestLink">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    darkMode: 'class',
+    theme: { extend: { fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] } } }
+  };
+</script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+<style>
+  html, body { font-family: 'Inter', system-ui, sans-serif; }
+  body { overscroll-behavior-y: contain; -webkit-tap-highlight-color: transparent; }
+  html.dark { color-scheme: dark; }
+  .longpress-fill { transform-origin: left; transform: scaleX(0); }
+  input[type="color"] { -webkit-appearance: none; appearance: none; background: none; }
+  input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+  input[type="color"]::-webkit-color-swatch { border: none; border-radius: 6px; }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-thumb { background: rgba(139,127,213,.35); border-radius: 3px; }
+  @keyframes toastIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+  .animate-toast-in { animation: toastIn .25s ease-out; }
+  @keyframes pulseOnce { 0% { transform: scale(.97); } 60% { transform: scale(1.02); } 100% { transform: scale(1); } }
+  .animate-pulse-once { animation: pulseOnce .4s ease-out; }
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+  }
+</style>
+</head>
+<body class="bg-violet-50 dark:bg-[#14121f] text-slate-800 dark:text-violet-50 antialiased min-h-screen">
+
+<div id="app"></div>
+<div id="modalRoot"></div>
+<div id="toastRoot" class="fixed bottom-3 inset-x-0 z-50 px-4 pointer-events-none"></div>
+<input type="file" id="importFileInput" accept="application/json" class="hidden">
+<input type="file" id="excelFileInput" accept=".xlsx,.xls,.csv" class="hidden">
+
+<script>
+/* ============================== STATE ============================== */
+const STORAGE_KEY = 'orguTakip.v1';
+
+function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+
+function seedProject(){
+  return {
+    id: uid(),
+    name: 'Bebek Battaniyesi',
+    pattern: 'Granny Square Şerit Desen',
+    craft: 'crochet',
+    hookSize: '4.0 mm',
+    mode: 'simple',
+    totalRows: 12,
+    rows: [
+      { row: 1, color: 'Krem', hex: '#F5E9DA', stitches: 60, note: 'Zincirle başla' },
+      { row: 2, color: 'Krem', hex: '#F5E9DA', stitches: 60, note: '' },
+      { row: 3, color: 'Pudra Pembe', hex: '#F3C6D3', stitches: 60, note: 'Renk değişimi' },
+      { row: 4, color: 'Pudra Pembe', hex: '#F3C6D3', stitches: 64, note: '4 artır' },
+      { row: 5, color: 'Mint Yeşili', hex: '#BDE7D8', stitches: 64, note: 'Renk değişimi' },
+      { row: 6, color: 'Mint Yeşili', hex: '#BDE7D8', stitches: 64, note: '' },
+      { row: 7, color: 'Lavanta', hex: '#D8CDEF', stitches: 68, note: 'Renk değişimi, 4 artır' },
+      { row: 8, color: 'Lavanta', hex: '#D8CDEF', stitches: 68, note: '' },
+      { row: 9, color: 'Krem', hex: '#F5E9DA', stitches: 68, note: 'Renk değişimi' },
+      { row: 10, color: 'Krem', hex: '#F5E9DA', stitches: 72, note: '4 artır' },
+      { row: 11, color: 'Pudra Pembe', hex: '#F3C6D3', stitches: 72, note: 'Renk değişimi' },
+      { row: 12, color: 'Pudra Pembe', hex: '#F3C6D3', stitches: 72, note: 'Kenar bitişi' }
+    ],
+    currentRow: 1,
+    repeatCount: 0,
+    notes: 'Örnek proje — dilediğin gibi düzenleyebilir ya da silebilirsin. "Excel\'den Yapıştır" ile kendi tablonu aktarabilirsin.',
+    timeSpent: 0,
+    timerRunning: false,
+    timerStartedAt: null,
+    locked: false,
+    history: [],
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  };
+}
+
+function loadState(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(raw){
+      const parsed = JSON.parse(raw);
+      if(parsed && Array.isArray(parsed.projects)) return {
+        darkMode: !!parsed.darkMode,
+        projects: parsed.projects
+      };
+    }
+  }catch(err){ /* corrupted storage, fall back to fresh state */ }
+  return { darkMode: window.matchMedia('(prefers-color-scheme: dark)').matches, projects: [seedProject()] };
+}
+
+const persisted = loadState();
+const state = {
+  darkMode: persisted.darkMode,
+  projects: persisted.projects,
+  view: 'dashboard',       // 'dashboard' | 'project'
+  activeProjectId: null,
+  projectTab: 'counter',   // 'counter' | 'plan' | 'notes'
+  modal: null,
+  wakeLockEnabled: false,
+  installAvailable: false
+};
+
+function save(){
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({ darkMode: state.darkMode, projects: state.projects }));
+}
+
+function getActiveProject(){ return state.projects.find(p => p.id === state.activeProjectId) || null; }
+function getRowData(project, rowNum){ return (project.rows || []).find(r => r.row === rowNum) || null; }
+function getTotal(p){ return p.totalRows || ((p.rows && p.rows.length) ? Math.max(...p.rows.map(r => r.row)) : 0); }
+function rowWord(p){ return p.craft === 'crochet' ? 'Tur' : 'Sıra'; }
+
+/* Piksel şema: sayfadaki satır sırası genelde yukarıdan aşağı (resmin tepesinden tabanına).
+   Örgüye ise genelde en alttan başlanır, bu yüzden iş sırası ters çevrilir; ayrıca düz
+   örgüde her satırda iş yönü değişir (git-gel), bu da tek/çift satırlarda diziyi ters çevirerek yansıtılır. */
+function getChartWorkRow(project, workRow){
+  const c = project.chart; if(!c) return null;
+  if(workRow < 1 || workRow > c.height) return null;
+  const sheetIdx = c.bottomToTop ? (c.height - workRow) : (workRow - 1);
+  const codes = c.grid[sheetIdx];
+  if(!codes) return null;
+  const reversed = c.alternateDirection && (workRow % 2 === 1);
+  return reversed ? codes.slice().reverse() : codes;
+}
+function legendMapOf(project){
+  const map = {};
+  ((project.chart && project.chart.legend) || []).forEach(l => { map[l.code] = l; });
+  return map;
+}
+function runLengthEncode(codes, legendMap){
+  if(!codes) return [];
+  const runs = [];
+  codes.forEach(code => {
+    const last = runs[runs.length - 1];
+    if(last && last.code === code) last.count++;
+    else runs.push({ code, count: 1 });
+  });
+  return runs.map(r => {
+    const entry = legendMap[String(r.code)];
+    return { code: r.code, count: r.count, hex: (entry && entry.hex) || '#CCCCCC', label: (entry && entry.label) || `Kod ${r.code}` };
+  });
+}
+
+/* ============================== UTILITIES ============================== */
+function escapeHtml(str){
+  return String(str ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+}
+const escapeAttr = escapeHtml;
+
+function haptic(pattern){ if(navigator.vibrate){ try{ navigator.vibrate(pattern); }catch(e){} } }
+
+function timeAgo(ts){
+  const diff = Math.max(0, Date.now() - ts);
+  const min = Math.floor(diff / 60000);
+  if(min < 1) return 'az önce';
+  if(min < 60) return `${min} dk önce`;
+  const hr = Math.floor(min / 60);
+  if(hr < 24) return `${hr} sa önce`;
+  return `${Math.floor(hr / 24)} gün önce`;
+}
+
+function formatTime(totalSeconds){
+  const s = Math.max(0, Math.round(totalSeconds));
+  const h = Math.floor(s / 3600).toString().padStart(2, '0');
+  const m = Math.floor((s % 3600) / 60).toString().padStart(2, '0');
+  const sec = (s % 60).toString().padStart(2, '0');
+  return `${h}:${m}:${sec}`;
+}
+
+function computeElapsed(p){
+  return p.timeSpent + (p.timerRunning && p.timerStartedAt ? (Date.now() - p.timerStartedAt) / 1000 : 0);
+}
+
+function hexToRgb(hex){
+  const h = (hex || '#CCCCCC').replace('#', '');
+  const full = h.length === 3 ? h.split('').map(ch => ch + ch).join('') : h;
+  const n = parseInt(full, 16) || 0xCCCCCC;
+  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+}
+function drawChartPreview(project){
+  const canvas = document.getElementById('chartPreviewCanvas');
+  if(!canvas || !project.chart) return;
+  const c = project.chart;
+  canvas.width = c.width;
+  canvas.height = c.height;
+  const ctx = canvas.getContext('2d');
+  const legendMap = legendMapOf(project);
+  const imgData = ctx.createImageData(c.width, c.height);
+  for(let y = 0; y < c.height; y++){
+    const row = c.grid[y];
+    for(let x = 0; x < c.width; x++){
+      const entry = legendMap[String(row[x])];
+      const rgb = hexToRgb(entry ? entry.hex : '#CCCCCC');
+      const idx = (y * c.width + x) * 4;
+      imgData.data[idx] = rgb.r; imgData.data[idx + 1] = rgb.g; imgData.data[idx + 2] = rgb.b; imgData.data[idx + 3] = 255;
+    }
+  }
+  ctx.putImageData(imgData, 0, 0);
+}
+
+function buildRowsFromTable(tableRows){
+  if(!tableRows || !tableRows.length) return [];
+  const palette = ['#F3C6D3', '#BDE7D8', '#D8CDEF', '#F5E9DA', '#FBD1A2', '#A9D6E5', '#F6A6B2', '#C9E4C5'];
+  const colorHexMap = {};
+  let nextIdx = 0;
+  let startIdx = 0;
+  const firstCols = tableRows[0].map(c => String(c ?? '').trim());
+  if(isNaN(parseInt(firstCols[0], 10))) startIdx = 1;
+  const rows = [];
+  for(let i = startIdx; i < tableRows.length; i++){
+    const cols = tableRows[i].map(c => String(c ?? '').trim());
+    if(!cols.some(c => c)) continue;
+    const rowNum = parseInt(cols[0], 10) || (rows.length + 1);
+    const color = cols[1] || 'Belirtilmemiş';
+    const stitches = parseInt(cols[2], 10) || 0;
+    const note = cols[3] || '';
+    if(!colorHexMap[color]){ colorHexMap[color] = palette[nextIdx % palette.length]; nextIdx++; }
+    rows.push({ row: rowNum, color, hex: colorHexMap[color], stitches, note });
+  }
+  return rows;
+}
+function parsePastedRows(text){
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const tableRows = lines.map(l => l.split(/\t|,/));
+  return buildRowsFromTable(tableRows);
+}
+/* Grafik/piksel şema (graphgan) tespiti: bir sayfa büyük, sayısal bir hücre ızgarasıysa
+   (satır=iş sırası, hücre=renk kodu) bunu düz "Sıra/Renk/İlmek" listesi yerine şema olarak ele al. */
+function analyzeWorkbookForChart(wb){
+  const sheetInfos = wb.SheetNames.map(name => ({
+    name, ws: wb.Sheets[name],
+    aoa: XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, raw: false, defval: '' })
+  }));
+  let gridInfo = null, bestScore = 0;
+  sheetInfos.forEach(info => {
+    const aoa = info.aoa;
+    if(aoa.length < 10) return;
+    const width = Math.max(...aoa.map(r => r.length));
+    if(width < 10) return;
+    let numericCount = 0, total = 0;
+    aoa.forEach(r => r.forEach(c => {
+      total++;
+      const s = String(c ?? '').trim();
+      const n = parseInt(s, 10);
+      if(s !== '' && !isNaN(n) && String(n) === s && n >= 0 && n < 200) numericCount++;
+    }));
+    const ratio = total ? numericCount / total : 0;
+    const score = ratio * aoa.length * width;
+    if(ratio > 0.7 && score > bestScore){ bestScore = score; gridInfo = info; }
+  });
+  if(!gridInfo) return null;
+
+  let legendInfo = null;
+  sheetInfos.forEach(info => {
+    if(info === gridInfo) return;
+    const aoa = info.aoa;
+    if(aoa.length < 2 || aoa.length > 300) return;
+    const col0nums = aoa.map(r => parseInt(String(r[0] ?? '').trim(), 10)).filter(n => !isNaN(n));
+    if(col0nums.length >= Math.min(3, aoa.length - 1)){
+      if(!legendInfo || aoa.length > legendInfo.aoa.length) legendInfo = info;
+    }
+  });
+
+  let instructionsInfo = null;
+  sheetInfos.forEach(info => {
+    if(info === gridInfo || info === legendInfo || instructionsInfo) return;
+    instructionsInfo = info;
+  });
+
+  return { gridInfo, legendInfo, instructionsInfo };
+}
+function normalizeGrid(aoa){
+  const width = Math.max(...aoa.map(r => r.length));
+  return aoa.map(row => {
+    const codes = row.map(c => { const n = parseInt(String(c ?? '').trim(), 10); return isNaN(n) ? 0 : n; });
+    while(codes.length < width) codes.push(0);
+    return codes;
+  });
+}
+function extractLegendColors(legendWs, legendAoa){
+  if(!legendAoa.length) return [];
+  const numCols = Math.max(...legendAoa.map(r => r.length));
+  let colorCol = 1, bestBlankRatio = -1;
+  for(let col = 1; col < numCols; col++){
+    let blanks = 0, count = 0;
+    for(let r = 1; r < legendAoa.length; r++){ count++; if(!String(legendAoa[r][col] ?? '').trim()) blanks++; }
+    const ratio = count ? blanks / count : 0;
+    if(ratio > bestBlankRatio){ bestBlankRatio = ratio; colorCol = col; }
+  }
+  const colLetter = XLSX.utils.encode_col(colorCol);
+  const results = [];
+  for(let r = 1; r < legendAoa.length; r++){
+    const code = String(legendAoa[r][0] ?? '').trim();
+    if(!code) continue;
+    const cell = legendWs ? legendWs[colLetter + (r + 1)] : null;
+    let hex = '#CCCCCC';
+    const rgb = cell && cell.s && ((cell.s.fgColor && cell.s.fgColor.rgb) || (cell.s.bgColor && cell.s.bgColor.rgb));
+    if(rgb) hex = '#' + rgb.slice(-6);
+    let label = '';
+    for(let c = 0; c < legendAoa[r].length; c++){
+      if(c === 0 || c === colorCol) continue;
+      const v = String(legendAoa[r][c] ?? '').trim();
+      if(v){ label = v; break; }
+    }
+    results.push({ code, hex, label: label || `Renk ${code}` });
+  }
+  return results;
+}
+function extractInstructionsText(info){
+  if(!info) return '';
+  return info.aoa.map(row => row.map(c => String(c ?? '').trim()).filter(Boolean).join(': ')).filter(Boolean).join('\n');
+}
+function parseExcelWorkbook(file){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try{
+        const data = new Uint8Array(e.target.result);
+        const wb = XLSX.read(data, { type: 'array', cellStyles: true });
+        const analysis = analyzeWorkbookForChart(wb);
+        if(analysis){
+          const grid = normalizeGrid(analysis.gridInfo.aoa);
+          const legend = extractLegendColors(analysis.legendInfo ? analysis.legendInfo.ws : null, analysis.legendInfo ? analysis.legendInfo.aoa : []);
+          const instructions = extractInstructionsText(analysis.instructionsInfo);
+          resolve({ type: 'chart', grid, legend, instructions, width: grid[0].length, height: grid.length });
+        } else {
+          const aoa = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: false, defval: '' });
+          resolve({ type: 'simple', rows: buildRowsFromTable(aoa) });
+        }
+      }catch(err){ reject(err); }
+    };
+    reader.onerror = () => reject(new Error('read failed'));
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+/* ============================== TOASTS ============================== */
+let toastTimeout = null;
+function showToast(message, opts = {}){
+  const root = document.getElementById('toastRoot');
+  root.innerHTML = `
+    <div class="mx-auto max-w-sm pointer-events-auto bg-slate-800 dark:bg-violet-100 text-white dark:text-slate-800 text-sm rounded-2xl shadow-lg px-4 py-3 flex items-center gap-3 animate-toast-in">
+      <span class="flex-1">${escapeHtml(message)}</span>
+      ${opts.actionLabel ? `<button id="toastActionBtn" class="font-bold text-violet-300 dark:text-violet-600 shrink-0">${escapeHtml(opts.actionLabel)}</button>` : ''}
+    </div>`;
+  if(opts.actionLabel && opts.onAction){
+    document.getElementById('toastActionBtn').onclick = () => { opts.onAction(); clearToast(); };
+  }
+  if(toastTimeout) clearTimeout(toastTimeout);
+  toastTimeout = setTimeout(clearToast, opts.duration || 3200);
+}
+function clearToast(){ document.getElementById('toastRoot').innerHTML = ''; }
+
+/* ============================== HISTORY / UNDO ============================== */
+function pushHistory(p, prop, value){
+  p.history = p.history || [];
+  p.history.push({ prop, value });
+  if(p.history.length > 5) p.history.shift();
+}
+function undoLast(){
+  const p = getActiveProject();
+  if(!p || !p.history || !p.history.length) return;
+  const last = p.history.pop();
+  p[last.prop] = last.value;
+  if(last.prop === 'currentRow') p.currentBlockIndex = 0;
+  save(); render();
+  showToast('Geri alındı');
+}
+
+/* ============================== ACTIONS: COUNTER ============================== */
+function handleCounterInc(){
+  const p = getActiveProject(); if(!p) return;
+  if(p.locked){ showToast('🔒 Kilitli — kilidi açmak için asma kilide basılı tutun'); return; }
+  const total = getTotal(p);
+  const prevRowData = getRowData(p, p.currentRow);
+  pushHistory(p, 'currentRow', p.currentRow);
+  p.currentRow += 1;
+  p.currentBlockIndex = 0;
+  const newRowData = getRowData(p, p.currentRow);
+  p.updatedAt = Date.now();
+  save(); render();
+  if(total && p.currentRow === total + 1){
+    haptic([40, 30, 40, 30, 80]);
+    showToast('🎉 Tebrikler! Deseni tamamladın!', { actionLabel: 'Geri Al', onAction: undoLast, duration: 5000 });
+    return;
+  }
+  if(prevRowData && newRowData && prevRowData.color !== newRowData.color) haptic([30, 40, 30]);
+  else haptic(15);
+  showToast(`${rowWord(p)} ${p.currentRow}`, { actionLabel: 'Geri Al', onAction: undoLast });
+}
+function handleCounterDec(){
+  const p = getActiveProject(); if(!p) return;
+  if(p.locked){ showToast('🔒 Kilitli — kilidi açmak için asma kilide basılı tutun'); return; }
+  if(p.currentRow <= 1) return;
+  pushHistory(p, 'currentRow', p.currentRow);
+  p.currentRow -= 1;
+  p.currentBlockIndex = 0;
+  p.updatedAt = Date.now();
+  haptic(15);
+  save(); render();
+  showToast(`${rowWord(p)} ${p.currentRow}`, { actionLabel: 'Geri Al', onAction: undoLast });
+}
+function handleRepeatInc(){
+  const p = getActiveProject(); if(!p || p.locked) return;
+  pushHistory(p, 'repeatCount', p.repeatCount);
+  p.repeatCount++; haptic(10); save(); render();
+}
+function handleRepeatDec(){
+  const p = getActiveProject(); if(!p || p.locked) return;
+  if(p.repeatCount <= 0) return;
+  pushHistory(p, 'repeatCount', p.repeatCount);
+  p.repeatCount--; haptic(10); save(); render();
+}
+function handleJumpToRow(rowNum){
+  const p = getActiveProject(); if(!p || p.locked) return;
+  pushHistory(p, 'currentRow', p.currentRow);
+  p.currentRow = rowNum; p.currentBlockIndex = 0; p.updatedAt = Date.now();
+  state.projectTab = 'counter';
+  haptic(15); save(); render();
+}
+function handleBlockNext(){
+  const p = getActiveProject(); if(!p || !p.chart || p.locked) return;
+  const runs = runLengthEncode(getChartWorkRow(p, p.currentRow), legendMapOf(p));
+  if(!runs.length) return;
+  const idx = p.currentBlockIndex || 0;
+  if(idx < runs.length - 1){ p.currentBlockIndex = idx + 1; haptic(10); save(); render(); }
+  else { haptic([20, 20, 20]); showToast('Bu sıradaki son blok — "+ Sıra" ile ilerleyebilirsin'); }
+}
+function handleBlockPrev(){
+  const p = getActiveProject(); if(!p || !p.chart || p.locked) return;
+  const idx = p.currentBlockIndex || 0;
+  if(idx > 0){ p.currentBlockIndex = idx - 1; haptic(10); save(); render(); }
+}
+function handleResetCounter(){
+  const p = getActiveProject(); if(!p) return;
+  p.currentRow = 1; p.repeatCount = 0; p.history = []; p.currentBlockIndex = 0;
+  p.updatedAt = Date.now();
+  save(); render();
+  showToast('Sayaç sıfırlandı');
+}
+function handleToggleLockTap(id){
+  const p = state.projects.find(x => x.id === id); if(!p || p.locked) return;
+  p.locked = true; save(); render(); haptic(20);
+  showToast('🔒 Sayaç kilitlendi');
+}
+function handleUnlock(id){
+  const p = state.projects.find(x => x.id === id); if(!p) return;
+  p.locked = false; save(); render(); haptic([20, 20, 20]);
+  showToast('🔓 Kilit açıldı');
+}
+
+/* ============================== ACTIONS: TIMER ============================== */
+function handleTimerToggle(){
+  const p = getActiveProject(); if(!p) return;
+  if(p.timerRunning){
+    p.timeSpent += (Date.now() - p.timerStartedAt) / 1000;
+    p.timerRunning = false; p.timerStartedAt = null;
+  } else {
+    p.timerRunning = true; p.timerStartedAt = Date.now();
+  }
+  save(); render();
+}
+function commitRunningTimers(){
+  state.projects.forEach(p => {
+    if(p.timerRunning && p.timerStartedAt){
+      p.timeSpent += (Date.now() - p.timerStartedAt) / 1000;
+      p.timerStartedAt = Date.now();
+    }
+  });
+}
+
+/* ============================== ACTIONS: WAKE LOCK ============================== */
+let wakeLockSentinel = null;
+async function requestWakeLock(){
+  if(!('wakeLock' in navigator)) return false;
+  try{
+    wakeLockSentinel = await navigator.wakeLock.request('screen');
+    wakeLockSentinel.addEventListener('release', () => { wakeLockSentinel = null; });
+    return true;
+  }catch(err){ return false; }
+}
+function releaseWakeLock(){ if(wakeLockSentinel){ wakeLockSentinel.release(); wakeLockSentinel = null; } }
+async function handleToggleWakelock(){
+  if(state.wakeLockEnabled){ releaseWakeLock(); state.wakeLockEnabled = false; render(); return; }
+  const ok = await requestWakeLock();
+  state.wakeLockEnabled = ok;
+  showToast(ok ? '💡 Ekran açık kalacak' : 'Cihazınız bu özelliği desteklemiyor');
+  render();
+}
+document.addEventListener('visibilitychange', async () => {
+  if(state.wakeLockEnabled && document.visibilityState === 'visible' && !wakeLockSentinel) await requestWakeLock();
+  if(document.visibilityState === 'hidden'){ commitRunningTimers(); save(); }
+});
+window.addEventListener('beforeunload', () => { commitRunningTimers(); save(); });
+
+/* ============================== ACTIONS: PROJECTS / MODAL ============================== */
+function openNewProjectModal(){
+  state.modal = {
+    type: 'editProject', isNew: true, showPaste: false,
+    draft: {
+      id: uid(), name: '', pattern: '', craft: 'knitting', hookSize: '', mode: 'simple', totalRows: 0,
+      rows: [], currentRow: 1, repeatCount: 0, notes: '', timeSpent: 0, timerRunning: false,
+      timerStartedAt: null, locked: false, history: [], createdAt: Date.now(), updatedAt: Date.now()
+    }
+  };
+  render();
+}
+function openEditProjectModal(id){
+  const p = state.projects.find(x => x.id === id); if(!p) return;
+  state.modal = { type: 'editProject', isNew: false, showPaste: false, draft: JSON.parse(JSON.stringify(p)) };
+  render();
+}
+function saveProjectForm(){
+  const d = state.modal.draft;
+  if(!d.name || !d.name.trim()){ showToast('Lütfen bir proje adı girin'); return; }
+  d.updatedAt = Date.now();
+  if(state.modal.isNew) state.projects.push(d);
+  else {
+    const idx = state.projects.findIndex(x => x.id === d.id);
+    if(idx > -1) state.projects[idx] = d;
+  }
+  state.modal = null;
+  save(); render();
+  showToast('Proje kaydedildi');
+}
+function handleDeleteProject(id){
+  state.projects = state.projects.filter(p => p.id !== id);
+  if(state.activeProjectId === id){ state.view = 'dashboard'; state.activeProjectId = null; }
+  if(state.modal && state.modal.draft && state.modal.draft.id === id) state.modal = null;
+  save(); render();
+  showToast('Proje silindi');
+}
+function parsePastedRowsAction(){
+  const text = document.getElementById('f_paste').value;
+  const rows = parsePastedRows(text);
+  applyParsedRowsToDraft(rows);
+}
+function applyParsedRowsToDraft(rows){
+  if(!rows.length){ showToast('Dosyada okunabilir satır bulunamadı'); return; }
+  state.modal.draft.rows = rows;
+  if(!state.modal.draft.totalRows) state.modal.draft.totalRows = Math.max(...rows.map(r => r.row));
+  state.modal.showPaste = false;
+  render();
+  showToast(`${rows.length} ${rowWord(state.modal.draft).toLowerCase()} eklendi`);
+}
+function handleResetAllData(){
+  state.projects = []; state.view = 'dashboard'; state.activeProjectId = null; state.modal = null;
+  save(); render();
+  showToast('Tüm veriler sıfırlandı');
+}
+/* ============================== ACTIONS: GAUGE CORRECTION ============================== */
+/* İlmekler kare değildir (genelde eninden farklı yüksekliktedir). Kareye göre çizilmiş bir
+   piksel şemasını gerçek gauge'a göre düzeltmek için, kullanıcının ölçtüğü ilmek eni / sıra
+   yüksekliği oranı kadar ızgarayı "en yakın komşu" (nearest-neighbor) yöntemiyle yeniden
+   örnekliyoruz — renk oranlarını tahmini ölçeklemek yerine gerçek piksel konumlarını örnekler,
+   böylece ince detaylar (kontur gibi) mümkün olduğunca korunur. Her zaman orijinal (bozulmamış)
+   ızgaradan yeniden hesaplanır, böylece art arda düzeltmeler birikerek bozulmaya yol açmaz. */
+function resampleGridWidth(grid, newWidth){
+  const oldWidth = grid[0].length;
+  return grid.map(row => {
+    const newRow = new Array(newWidth);
+    for(let i = 0; i < newWidth; i++) newRow[i] = row[Math.min(oldWidth - 1, Math.floor(i * oldWidth / newWidth))];
+    return newRow;
+  });
+}
+function resampleGridHeight(grid, newHeight){
+  const oldHeight = grid.length;
+  const result = new Array(newHeight);
+  for(let i = 0; i < newHeight; i++) result[i] = grid[Math.min(oldHeight - 1, Math.floor(i * oldHeight / newHeight))].slice();
+  return result;
+}
+function handleApplyGaugeFix(){
+  const p = getActiveProject(); if(!p || !p.chart) return;
+  const c = p.chart;
+  const sw = c.stitchWidthMm, rh = c.rowHeightMm;
+  if(!sw || !rh){ showToast('Lütfen önce ilmek eni ve sıra yüksekliğini (mm) girin'); return; }
+  const ratio = sw / rh;
+  if(Math.abs(ratio - 1) < 0.03){ showToast('Gauge zaten kareye çok yakın, düzeltmeye gerek yok'); return; }
+  if(!c.originalGrid){ c.originalGrid = c.grid.map(r => r.slice()); c.originalWidth = c.width; c.originalHeight = c.height; }
+  if((c.gaugeFixAxis || 'width') === 'height'){
+    const newHeight = Math.max(4, Math.round(c.originalHeight * ratio));
+    c.grid = resampleGridHeight(c.originalGrid, newHeight);
+    c.height = newHeight;
+    p.totalRows = newHeight;
+    p.currentRow = Math.min(p.currentRow, newHeight) || 1;
+    showToast(`Sıra sayısı ${c.originalHeight} → ${newHeight} olarak güncellendi`);
+  } else {
+    const newWidth = Math.max(4, Math.round(c.originalWidth / ratio));
+    c.grid = resampleGridWidth(c.originalGrid, newWidth);
+    c.width = newWidth;
+    showToast(`İlmek sayısı ${c.originalWidth} → ${newWidth} olarak güncellendi`);
+  }
+  p.updatedAt = Date.now();
+  save(); render();
+}
+function handleRevertGaugeFix(){
+  const p = getActiveProject(); if(!p || !p.chart || !p.chart.originalGrid) return;
+  const c = p.chart;
+  c.grid = c.originalGrid.map(r => r.slice());
+  c.width = c.originalWidth; c.height = c.originalHeight;
+  delete c.originalGrid; delete c.originalWidth; delete c.originalHeight;
+  p.totalRows = c.height;
+  p.currentRow = Math.min(p.currentRow, c.height) || 1;
+  p.updatedAt = Date.now();
+  save(); render();
+  showToast('Orijinal şemaya dönüldü');
+}
+function downloadExport(){
+  const blob = new Blob([JSON.stringify({ exportedAt: Date.now(), projects: state.projects }, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `orgu-takip-yedek-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
+/* ============================== PWA: INSTALL PROMPT + MANIFEST ============================== */
+let deferredInstallPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  state.installAvailable = true;
+  render();
+});
+async function handleInstallApp(){
+  if(!deferredInstallPrompt) return;
+  deferredInstallPrompt.prompt();
+  await deferredInstallPrompt.userChoice;
+  deferredInstallPrompt = null;
+  state.installAvailable = false;
+  render();
+}
+(function setupManifest(){
+  const iconDataUri = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%238b7fd1'/%3E%3Ctext x='50' y='70' font-size='60' text-anchor='middle'%3E%F0%9F%A7%B6%3C/text%3E%3C/svg%3E";
+  const manifest = {
+    name: 'Örgü Takip - El İşi Asistanım',
+    short_name: 'Örgü Takip',
+    start_url: '.',
+    display: 'standalone',
+    background_color: '#faf7fc',
+    theme_color: '#8b7fd1',
+    icons: [{ src: iconDataUri, sizes: '100x100', type: 'image/svg+xml' }]
+  };
+  const blob = new Blob([JSON.stringify(manifest)], { type: 'application/manifest+json' });
+  document.getElementById('manifestLink').setAttribute('href', URL.createObjectURL(blob));
+})();
+
+/* ============================== LONG PRESS ============================== */
+function bindLongPress(el, onComplete, duration = 850){
+  let timer = null;
+  const fillEl = el.querySelector('.longpress-fill');
+  function begin(e){
+    e.preventDefault();
+    if(fillEl){ fillEl.style.transition = `transform ${duration}ms linear`; requestAnimationFrame(() => { fillEl.style.transform = 'scaleX(1)'; }); }
+    timer = setTimeout(() => { haptic([20, 30, 20]); onComplete(); cancel(); }, duration);
+  }
+  function cancel(){
+    if(timer){ clearTimeout(timer); timer = null; }
+    if(fillEl){ fillEl.style.transition = 'none'; fillEl.style.transform = 'scaleX(0)'; }
+  }
+  el.addEventListener('pointerdown', begin);
+  el.addEventListener('pointerup', cancel);
+  el.addEventListener('pointerleave', cancel);
+  el.addEventListener('pointercancel', cancel);
+  el.addEventListener('click', e => e.stopPropagation());
+}
+function dispatchLongpress(value){
+  const [action, id] = value.split(':');
+  if(action === 'reset-counter') handleResetCounter();
+  else if(action === 'delete-project') handleDeleteProject(id);
+  else if(action === 'unlock') handleUnlock(id);
+  else if(action === 'reset-all') handleResetAllData();
+}
+
+/* ============================== RENDER: DASHBOARD ============================== */
+function renderEmptyState(){
+  return `
+  <div class="text-center py-16 px-6">
+    <div class="text-5xl mb-3">🧶</div>
+    <div class="text-sm font-semibold text-violet-500 dark:text-violet-300">Henüz bir projen yok</div>
+    <div class="text-xs text-violet-400 dark:text-violet-400 mt-1">Sağ alttaki + düğmesiyle ilk projeni ekle</div>
+  </div>`;
+}
+function renderProjectCard(p){
+  const total = getTotal(p);
+  const pct = total ? Math.min(100, Math.round((Math.min(p.currentRow, total) / total) * 100)) : 0;
+  const craftIcon = p.craft === 'crochet' ? '🪝' : '🧶';
+  return `
+  <div data-action="open-project" data-id="${p.id}" role="button" tabindex="0" class="w-full text-left bg-white dark:bg-[#211d2e] rounded-2xl border border-violet-100 dark:border-violet-900/40 shadow-sm p-4 active:scale-[0.98] transition cursor-pointer">
+    <div class="flex items-start justify-between gap-2">
+      <div class="min-w-0">
+        <div class="flex items-center gap-1.5 text-sm font-bold text-slate-800 dark:text-violet-50 truncate">
+          <span>${craftIcon}</span><span class="truncate">${escapeHtml(p.name)}</span>
+          ${p.locked ? '<span class="text-xs">🔒</span>' : ''}
+        </div>
+        <div class="flex items-center gap-1.5 mt-0.5">
+          <div class="text-xs text-violet-400 dark:text-violet-400 truncate">${escapeHtml(p.pattern || 'Desen belirtilmemiş')}</div>
+          ${p.mode === 'chart' ? '<span class="shrink-0 text-[9px] px-1.5 py-0.5 rounded-full bg-violet-100 dark:bg-violet-900/40 text-violet-500 dark:text-violet-300 font-bold">🖼️ PİKSEL ŞEMA</span>' : ''}
+        </div>
+      </div>
+      <button data-longpress="delete-project:${p.id}" class="relative w-8 h-8 shrink-0 rounded-full flex items-center justify-center text-rose-300 dark:text-rose-500 overflow-hidden" title="Silmek için basılı tutun">
+        <span class="longpress-fill absolute inset-0 bg-rose-100 dark:bg-rose-900/50"></span>
+        <span class="relative z-10 text-sm">🗑</span>
+      </button>
+    </div>
+    ${total ? `
+    <div class="mt-3">
+      <div class="h-1.5 rounded-full bg-violet-100 dark:bg-violet-900/40 overflow-hidden">
+        <div class="h-full bg-violet-400 dark:bg-violet-500" style="width:${pct}%"></div>
+      </div>
+      <div class="flex justify-between text-[11px] text-violet-400 dark:text-violet-400 mt-1">
+        <span>${rowWord(p)} ${Math.min(p.currentRow, total)}/${total}</span><span>%${pct}</span>
+      </div>
+    </div>` : `<div class="mt-3 text-[11px] text-violet-400 dark:text-violet-400">Sayaç: ${p.currentRow}</div>`}
+    <div class="text-[11px] text-violet-300 dark:text-violet-500 mt-2">${timeAgo(p.updatedAt)} güncellendi</div>
+  </div>`;
+}
+function renderDashboard(){
+  const sorted = state.projects.slice().sort((a, b) => b.updatedAt - a.updatedAt);
+  return `
+  <div class="max-w-md mx-auto pb-28">
+    <header class="sticky top-0 z-20 bg-violet-50/90 dark:bg-[#14121f]/90 backdrop-blur px-4 pt-4 pb-3 border-b border-violet-100 dark:border-violet-900/30 flex items-center justify-between">
+      <div>
+        <div class="text-lg font-extrabold text-violet-600 dark:text-violet-200">🧶 Örgü Takip</div>
+        <div class="text-xs text-violet-400 dark:text-violet-400">${state.projects.length} proje</div>
+      </div>
+      <div class="flex items-center gap-2">
+        <button data-action="toggle-dark" class="w-10 h-10 rounded-full bg-white dark:bg-[#211d2e] border border-violet-100 dark:border-violet-900/40 flex items-center justify-center text-lg">${state.darkMode ? '🌙' : '☀️'}</button>
+        <button data-action="open-settings" class="w-10 h-10 rounded-full bg-white dark:bg-[#211d2e] border border-violet-100 dark:border-violet-900/40 flex items-center justify-center text-lg">⚙️</button>
+      </div>
+    </header>
+    <div class="px-4 pt-4 space-y-3">
+      ${state.projects.length ? sorted.map(renderProjectCard).join('') : renderEmptyState()}
+    </div>
+  </div>
+  <button data-action="new-project" class="fixed bottom-6 right-5 w-16 h-16 rounded-full bg-violet-500 text-white text-3xl shadow-lg active:scale-95 transition flex items-center justify-center z-30">+</button>
+  `;
+}
+
+/* ============================== RENDER: PROJECT VIEW ============================== */
+function tabButton(key, label){
+  const active = state.projectTab === key;
+  return `<button data-action="tab-${key}" class="px-4 h-8 rounded-full text-xs font-bold transition ${active ? 'bg-violet-500 text-white' : 'bg-white dark:bg-[#211d2e] text-violet-400 dark:text-violet-300 border border-violet-100 dark:border-violet-900/40'}">${label}</button>`;
+}
+function renderTopBar(project){
+  return `
+  <div class="sticky top-0 z-20 bg-violet-50/90 dark:bg-[#14121f]/90 backdrop-blur border-b border-violet-100 dark:border-violet-900/30">
+    <div class="flex items-center gap-2 px-3 py-2">
+      <button data-action="back-to-dashboard" class="w-10 h-10 rounded-full flex items-center justify-center text-violet-500 dark:text-violet-300 text-xl active:bg-violet-100 dark:active:bg-violet-900/40">←</button>
+      <div class="flex-1 min-w-0">
+        <div class="text-sm font-bold text-slate-800 dark:text-violet-50 truncate">${escapeHtml(project.name)}</div>
+        <div class="text-xs text-violet-400 dark:text-violet-400 truncate">${escapeHtml(project.pattern || '')}</div>
+      </div>
+      <button data-action="timer-toggle" class="flex items-center gap-1.5 px-3 h-9 rounded-full bg-white dark:bg-[#211d2e] border border-violet-100 dark:border-violet-900/40 text-xs font-semibold text-violet-500 dark:text-violet-300 shrink-0">
+        <span>${project.timerRunning ? '⏸' : '▶'}</span>
+        <span id="timerDisplay" class="tabular-nums">${formatTime(computeElapsed(project))}</span>
+      </button>
+      <button data-action="toggle-wakelock" class="w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${state.wakeLockEnabled ? 'bg-amber-400 text-white' : 'bg-white dark:bg-[#211d2e] text-violet-400 dark:text-violet-300 border border-violet-100 dark:border-violet-900/40'}" title="Ekranı açık tut">💡</button>
+    </div>
+    <div class="flex items-center px-3 gap-1.5 pb-2.5">
+      ${tabButton('counter', 'Sayaç')}
+      ${tabButton('plan', 'Plan')}
+      ${project.mode === 'chart' ? tabButton('legend', 'Lejant') : ''}
+      ${tabButton('notes', 'Notlar')}
+      <div class="flex-1"></div>
+      ${project.locked
+        ? `<button data-longpress="unlock:${project.id}" class="relative w-9 h-9 rounded-full flex items-center justify-center overflow-hidden bg-amber-100 dark:bg-amber-900/30 text-amber-500" title="Kilidi açmak için basılı tutun"><span class="longpress-fill absolute inset-0 bg-amber-200/70 dark:bg-amber-800/50"></span><span class="relative z-10 text-sm">🔒</span></button>`
+        : `<button data-action="toggle-lock" data-id="${project.id}" class="w-9 h-9 rounded-full flex items-center justify-center bg-white dark:bg-[#211d2e] text-violet-300 border border-violet-100 dark:border-violet-900/40" title="Kilitle">🔓</button>`}
+      <button data-longpress="reset-counter" class="relative w-9 h-9 rounded-full flex items-center justify-center overflow-hidden bg-white dark:bg-[#211d2e] border border-rose-100 dark:border-rose-900/40 text-rose-400" title="Sıfırlamak için basılı tutun">
+        <span class="longpress-fill absolute inset-0 bg-rose-100 dark:bg-rose-900/50"></span>
+        <span class="relative z-10 text-sm">⟲</span>
+      </button>
+    </div>
+  </div>`;
+}
+function renderCurrentRowMeta(project){
+  const total = getTotal(project);
+  if(total && project.currentRow > total){
+    return `<div class="mt-2"><div class="text-3xl">🎉</div><div class="text-sm font-semibold text-emerald-500 dark:text-emerald-400 mt-1">Desen tamamlandı!</div></div>`;
+  }
+  const rd = getRowData(project, project.currentRow);
+  if(!rd){
+    return `<div class="text-sm text-violet-400 dark:text-violet-400 mt-1">${total ? `Toplam ${total} ${rowWord(project).toLowerCase()}` : 'Serbest sayaç modu'}</div>`;
+  }
+  return `
+    <div class="flex items-center justify-center gap-2 mt-1">
+      <span class="w-6 h-6 rounded-full border border-black/10 shadow-sm shrink-0" style="background:${escapeAttr(rd.hex)}"></span>
+      <span class="text-base font-semibold text-slate-700 dark:text-violet-100">${escapeHtml(rd.color)}</span>
+    </div>
+    <div class="text-2xl font-bold text-violet-500 dark:text-violet-300 mt-1">${rd.stitches} <span class="text-sm font-normal text-violet-400">ilmek</span></div>
+    ${rd.note ? `<div class="text-xs text-violet-400 dark:text-violet-400 mt-1 italic">${escapeHtml(rd.note)}</div>` : ''}
+  `;
+}
+function renderNextPreview(project){
+  const rd = getRowData(project, project.currentRow + 1);
+  if(!rd) return '';
+  return `<div class="mt-3 pt-3 border-t border-dashed border-violet-100 dark:border-violet-900/40 text-xs text-violet-400 dark:text-violet-400">Sıradaki (${rd.row}): <span class="font-semibold" style="color:${escapeAttr(rd.hex)}">${escapeHtml(rd.color)}</span> · ${rd.stitches} ilmek</div>`;
+}
+function renderColorChangeBanner(project){
+  const rd = getRowData(project, project.currentRow);
+  const prev = getRowData(project, project.currentRow - 1);
+  if(!rd || !prev || rd.color === prev.color) return '';
+  return `
+  <div class="mx-4 mt-3 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 text-rose-600 dark:text-rose-300 text-sm font-medium px-4 py-2 flex items-center gap-2 animate-pulse-once">
+    <span>🎨</span><span>Renk değişti — şimdi <b>${escapeHtml(rd.color)}</b> kullan</span>
+  </div>`;
+}
+function renderCounterTab(project){
+  if(project.mode === 'chart' && project.chart) return renderChartCounterTab(project);
+  return renderSimpleCounterTab(project);
+}
+function renderSimpleCounterTab(project){
+  const total = getTotal(project);
+  const pct = total ? Math.min(100, Math.round((Math.min(project.currentRow, total) / total) * 100)) : 0;
+  return `
+  <div class="pb-40">
+    <div class="px-4 pt-3 pb-1">
+      <div class="flex items-center justify-between text-xs text-violet-400 dark:text-violet-300 mb-1">
+        <span>İlerleme</span><span>${Math.min(project.currentRow, total || project.currentRow)}/${total || '?'}</span>
+      </div>
+      <div class="h-2 rounded-full bg-violet-100 dark:bg-violet-900/40 overflow-hidden">
+        <div class="h-full bg-violet-400 dark:bg-violet-500 transition-all" style="width:${pct}%"></div>
+      </div>
+    </div>
+
+    ${renderColorChangeBanner(project)}
+
+    <div class="mx-4 mt-3 rounded-3xl bg-white dark:bg-[#211d2e] border border-violet-100 dark:border-violet-900/40 shadow-sm p-6 text-center">
+      <div class="text-xs uppercase tracking-widest text-violet-400 dark:text-violet-300 font-semibold">${rowWord(project)}</div>
+      <div class="text-[clamp(3.5rem,18vw,6rem)] leading-none font-extrabold text-violet-600 dark:text-violet-300 my-2 tabular-nums">${project.currentRow}</div>
+      ${renderCurrentRowMeta(project)}
+      ${renderNextPreview(project)}
+    </div>
+
+    <div class="mx-4 mt-4 flex items-center justify-center gap-4">
+      <button data-action="repeat-dec" class="w-11 h-11 rounded-full bg-violet-100 dark:bg-violet-900/40 text-violet-600 dark:text-violet-200 text-xl font-bold active:scale-90 transition">−</button>
+      <div class="text-sm text-violet-500 dark:text-violet-300 w-24 text-center">Tekrar: <span class="font-bold text-base">${project.repeatCount}</span></div>
+      <button data-action="repeat-inc" class="w-11 h-11 rounded-full bg-violet-100 dark:bg-violet-900/40 text-violet-600 dark:text-violet-200 text-xl font-bold active:scale-90 transition">+</button>
+    </div>
+  </div>
+
+  <div class="fixed bottom-0 inset-x-0 z-20 bg-gradient-to-t from-violet-50 dark:from-[#14121f] via-violet-50/95 dark:via-[#14121f]/95 to-transparent pt-6 pb-[max(env(safe-area-inset-bottom),1rem)]">
+    <div class="flex gap-3 px-4">
+      <button data-action="counter-dec" class="flex-1 h-20 rounded-3xl bg-white dark:bg-[#211d2e] border-2 border-violet-200 dark:border-violet-800 text-violet-500 dark:text-violet-300 text-4xl font-bold active:scale-95 transition shadow-sm touch-manipulation">−</button>
+      <button data-action="counter-inc" class="flex-[1.5] h-20 rounded-3xl bg-violet-500 active:bg-violet-600 text-white text-2xl font-bold active:scale-95 transition shadow-md touch-manipulation">+ ${rowWord(project)}</button>
+    </div>
+  </div>`;
+}
+function renderChartRunFocus(project, runs, codes){
+  if(!runs.length) return '';
+  const activeIdx = Math.min(project.currentBlockIndex || 0, runs.length - 1);
+  const activeRun = runs[activeIdx];
+  const isLast = activeIdx === runs.length - 1;
+  return `
+    <div class="text-xs text-violet-400 dark:text-violet-400 mb-2">${codes.length} ilmek · ${runs.length} renk bloğu</div>
+    <div class="flex h-5 rounded-lg overflow-hidden border border-black/5 dark:border-white/10 mb-3">
+      ${runs.map((r, i) => `<span class="${i === activeIdx ? 'ring-2 ring-inset ring-white dark:ring-black' : ''}" style="width:${(r.count / codes.length * 100)}%;background:${escapeAttr(r.hex)};${i < activeIdx ? 'opacity:.35' : ''}"></span>`).join('')}
+    </div>
+
+    <div class="rounded-2xl bg-violet-50 dark:bg-[#17151f] border-2 border-violet-300 dark:border-violet-600 p-4 mb-3">
+      <div class="text-[10px] uppercase tracking-wide text-violet-400 dark:text-violet-400 mb-1">Şimdi bu blok · ${activeIdx + 1}/${runs.length}</div>
+      <div class="flex items-center justify-center gap-2.5">
+        <span class="w-9 h-9 rounded-full border-2 border-black/10 shrink-0" style="background:${escapeAttr(activeRun.hex)}"></span>
+        <span class="text-4xl font-extrabold text-violet-600 dark:text-violet-300 tabular-nums">${activeRun.count}</span>
+        <span class="text-sm text-violet-400 dark:text-violet-400">ilmek</span>
+      </div>
+      <div class="text-xs font-semibold text-slate-600 dark:text-violet-200 mt-1.5 truncate">${escapeHtml(activeRun.label)}</div>
+    </div>
+
+    <div class="flex gap-2 mb-3">
+      <button data-action="block-prev" class="w-16 h-11 rounded-xl bg-violet-100 dark:bg-violet-900/40 text-violet-500 dark:text-violet-300 font-bold text-sm active:scale-95 transition">◀</button>
+      <button data-action="block-next" class="flex-1 h-11 rounded-xl bg-violet-500 active:bg-violet-600 text-white font-bold text-sm active:scale-95 transition">${isLast ? 'Bu Blok da Bitti ✓' : 'Bu Bloğu Bitirdim →'}</button>
+    </div>
+
+    <div class="flex flex-wrap justify-center gap-1.5">
+      ${runs.map((r, i) => `
+      <div class="flex items-center gap-1 rounded-full pl-1 pr-2 py-0.5 border ${i === activeIdx ? 'border-violet-400 bg-violet-100 dark:bg-violet-900/50 dark:border-violet-400' : 'border-violet-100 dark:border-violet-900/30 bg-violet-50 dark:bg-[#17151f]'}" style="${i < activeIdx ? 'opacity:.4' : ''}">
+        <span class="w-3 h-3 rounded-full border border-black/10 shrink-0" style="background:${escapeAttr(r.hex)}"></span>
+        <span class="text-[10px] font-bold text-slate-600 dark:text-violet-200">${i < activeIdx ? '✓' : ''}${r.count}</span>
+      </div>`).join('')}
+    </div>
+  `;
+}
+function renderChartCounterTab(project){
+  const c = project.chart;
+  const total = c.height;
+  const pct = Math.min(100, Math.round((Math.min(project.currentRow, total) / total) * 100));
+  const done = project.currentRow > total;
+  const legendMap = legendMapOf(project);
+  const codes = getChartWorkRow(project, project.currentRow);
+  const runs = runLengthEncode(codes, legendMap);
+  const nextCodes = getChartWorkRow(project, project.currentRow + 1);
+  const nextRuns = runLengthEncode(nextCodes, legendMap);
+  const isOdd = project.currentRow % 2 === 1;
+  const dirLabel = c.alternateDirection ? (isOdd ? '◀ Sağdan başla' : 'Soldan başla ▶') : '';
+  return `
+  <div class="pb-40">
+    <div class="px-4 pt-3 pb-1">
+      <div class="flex items-center justify-between text-xs text-violet-400 dark:text-violet-300 mb-1">
+        <span>İlerleme</span><span>${Math.min(project.currentRow, total)}/${total}</span>
+      </div>
+      <div class="h-2 rounded-full bg-violet-100 dark:bg-violet-900/40 overflow-hidden">
+        <div class="h-full bg-violet-400 dark:bg-violet-500 transition-all" style="width:${pct}%"></div>
+      </div>
+    </div>
+
+    <div class="mx-4 mt-3 rounded-3xl bg-white dark:bg-[#211d2e] border border-violet-100 dark:border-violet-900/40 shadow-sm p-5 text-center">
+      <div class="flex items-center justify-center gap-2 text-xs uppercase tracking-widest text-violet-400 dark:text-violet-300 font-semibold">
+        <span>${rowWord(project)}</span>
+        ${dirLabel ? `<span class="normal-case text-violet-500 dark:text-violet-300">· ${dirLabel}</span>` : ''}
+      </div>
+      <div class="text-[clamp(3.5rem,18vw,6rem)] leading-none font-extrabold text-violet-600 dark:text-violet-300 my-2 tabular-nums">${project.currentRow}</div>
+      ${done ? `
+        <div class="text-3xl">🎉</div><div class="text-sm font-semibold text-emerald-500 dark:text-emerald-400 mt-1">Desen tamamlandı!</div>
+      ` : renderChartRunFocus(project, runs, codes)}
+      ${nextRuns.length ? `
+      <div class="mt-3 pt-3 border-t border-dashed border-violet-100 dark:border-violet-900/40 text-xs text-violet-400 dark:text-violet-400">
+        Sıradaki (${project.currentRow + 1}): ${nextRuns.length} renk bloğu, ${nextCodes.length} ilmek
+      </div>` : ''}
+    </div>
+
+    <div class="mx-4 mt-4 flex items-center justify-center gap-4">
+      <button data-action="repeat-dec" class="w-11 h-11 rounded-full bg-violet-100 dark:bg-violet-900/40 text-violet-600 dark:text-violet-200 text-xl font-bold active:scale-90 transition">−</button>
+      <div class="text-sm text-violet-500 dark:text-violet-300 w-24 text-center">Tekrar: <span class="font-bold text-base">${project.repeatCount}</span></div>
+      <button data-action="repeat-inc" class="w-11 h-11 rounded-full bg-violet-100 dark:bg-violet-900/40 text-violet-600 dark:text-violet-200 text-xl font-bold active:scale-90 transition">+</button>
+    </div>
+  </div>
+
+  <div class="fixed bottom-0 inset-x-0 z-20 bg-gradient-to-t from-violet-50 dark:from-[#14121f] via-violet-50/95 dark:via-[#14121f]/95 to-transparent pt-6 pb-[max(env(safe-area-inset-bottom),1rem)]">
+    <div class="flex gap-3 px-4">
+      <button data-action="counter-dec" class="flex-1 h-20 rounded-3xl bg-white dark:bg-[#211d2e] border-2 border-violet-200 dark:border-violet-800 text-violet-500 dark:text-violet-300 text-4xl font-bold active:scale-95 transition shadow-sm touch-manipulation">−</button>
+      <button data-action="counter-inc" class="flex-[1.5] h-20 rounded-3xl bg-violet-500 active:bg-violet-600 text-white text-2xl font-bold active:scale-95 transition shadow-md touch-manipulation">+ ${rowWord(project)}</button>
+    </div>
+  </div>`;
+}
+function renderPlanTab(project){
+  if(project.mode === 'chart' && project.chart) return renderChartPlanTab(project);
+  return renderSimplePlanTab(project);
+}
+function renderSimplePlanTab(project){
+  const total = getTotal(project);
+  const rows = (project.rows || []).slice().sort((a, b) => a.row - b.row);
+  return `
+  <div class="px-4 py-3 pb-10">
+    <div class="flex items-center justify-between mb-3">
+      <div class="text-xs text-violet-400 dark:text-violet-400">${rows.length ? `${rows.length} ${rowWord(project).toLowerCase()} planlandı` : 'Henüz sıra planı yok'}</div>
+      <button data-action="edit-project" data-id="${project.id}" class="text-xs font-bold text-violet-500 dark:text-violet-300">✏️ Planı Düzenle</button>
+    </div>
+    ${!rows.length ? `<div class="text-center text-xs text-violet-300 dark:text-violet-500 py-10">Bu proje serbest sayaç modunda.<br>Bir plan eklemek için yukarıdaki "Planı Düzenle" düğmesini kullan.</div>` : `
+    <div class="space-y-2">
+      ${rows.map(r => `
+      <div data-action="jump-to-row" data-row="${r.row}" role="button" tabindex="0" class="w-full flex items-center gap-3 p-3 rounded-2xl border cursor-pointer transition ${r.row === project.currentRow ? 'border-violet-400 bg-violet-50 dark:bg-violet-900/30 dark:border-violet-500' : 'border-violet-100 dark:border-violet-900/30 bg-white dark:bg-[#211d2e]'}">
+        <span class="w-8 h-8 shrink-0 rounded-full flex items-center justify-center text-xs font-bold ${r.row === project.currentRow ? 'bg-violet-500 text-white' : 'bg-violet-100 dark:bg-violet-900/40 text-violet-500 dark:text-violet-300'}">${r.row}</span>
+        <span class="w-5 h-5 rounded-full shrink-0 border border-black/10" style="background:${escapeAttr(r.hex)}"></span>
+        <span class="flex-1 min-w-0">
+          <span class="block text-sm font-medium text-slate-700 dark:text-violet-100 truncate">${escapeHtml(r.color)}</span>
+          ${r.note ? `<span class="block text-xs text-violet-400 dark:text-violet-400 truncate">${escapeHtml(r.note)}</span>` : ''}
+        </span>
+        <span class="text-sm font-semibold text-violet-500 dark:text-violet-300 shrink-0">${r.stitches} ilmek</span>
+      </div>`).join('')}
+    </div>`}
+  </div>`;
+}
+function renderChartPlanTab(project){
+  const c = project.chart;
+  const legendMap = legendMapOf(project);
+  const sheetIdx = c.bottomToTop ? (c.height - project.currentRow) : (project.currentRow - 1);
+  const markerPct = Math.min(100, Math.max(0, (sheetIdx / c.height) * 100));
+  const previewHtml = `
+    <div class="relative mb-4 rounded-xl overflow-hidden border border-violet-100 dark:border-violet-900/40">
+      <canvas id="chartPreviewCanvas" class="block w-full h-auto" style="image-rendering:pixelated;"></canvas>
+      <div class="absolute left-0 right-0 h-[2px] bg-rose-500" style="top:${markerPct}%"></div>
+      <div class="absolute left-1 text-[9px] font-bold text-white bg-rose-500 px-1.5 py-0.5 rounded" style="top:${markerPct}%; transform:translateY(-50%);">Buradasın</div>
+    </div>`;
+  const rowsHtml = Array.from({ length: c.height }, (_, i) => i + 1).map(wr => {
+    const codes = getChartWorkRow(project, wr);
+    const runs = runLengthEncode(codes, legendMap);
+    const active = wr === project.currentRow;
+    return `
+    <div data-action="jump-to-row" data-row="${wr}" role="button" tabindex="0" class="w-full flex items-center gap-2 p-2 rounded-xl border cursor-pointer transition ${active ? 'border-violet-400 bg-violet-50 dark:bg-violet-900/30 dark:border-violet-500' : 'border-violet-100 dark:border-violet-900/30 bg-white dark:bg-[#211d2e]'}">
+      <span class="w-7 h-7 shrink-0 rounded-full flex items-center justify-center text-[11px] font-bold ${active ? 'bg-violet-500 text-white' : 'bg-violet-100 dark:bg-violet-900/40 text-violet-500 dark:text-violet-300'}">${wr}</span>
+      <div class="flex-1 flex h-4 rounded overflow-hidden border border-black/5 dark:border-white/10">
+        ${runs.map(r => `<span style="width:${(r.count / codes.length * 100)}%;background:${escapeAttr(r.hex)}" title="${escapeAttr(r.label)}"></span>`).join('')}
+      </div>
+      <span class="text-[10px] text-violet-400 dark:text-violet-400 shrink-0">${runs.length} renk</span>
+    </div>`;
+  }).join('');
+  return `
+  <div class="px-4 py-3 pb-10">
+    ${previewHtml}
+    <div class="flex items-center justify-between mb-3">
+      <div class="text-xs text-violet-400 dark:text-violet-400">${c.height} ${rowWord(project).toLowerCase()} × ${c.width} ilmek (piksel şema)</div>
+      <button data-action="tab-legend" class="text-xs font-bold text-violet-500 dark:text-violet-300">🎨 Renk Lejantı</button>
+    </div>
+    <div class="space-y-1.5">${rowsHtml}</div>
+  </div>`;
+}
+function renderLegendTab(project){
+  const c = project.chart;
+  if(!c) return `<div class="p-6 text-center text-xs text-violet-300 dark:text-violet-500">Bu proje için renk lejantı yok.</div>`;
+  const totals = {};
+  c.grid.forEach(row => row.forEach(code => { totals[code] = (totals[code] || 0) + 1; }));
+  return `
+  <div class="px-4 py-3 pb-10">
+    ${c.instructions ? `<div class="mb-3 p-3 rounded-xl bg-violet-100/60 dark:bg-violet-900/20 text-xs text-violet-600 dark:text-violet-300 whitespace-pre-line">${escapeHtml(c.instructions)}</div>` : ''}
+    <div class="flex items-center justify-between mb-2">
+      <label class="flex items-center gap-1.5 text-xs text-violet-500 dark:text-violet-300"><input type="checkbox" data-chart-toggle="bottomToTop" ${c.bottomToTop ? 'checked' : ''}> Alttan yukarı doğru öreceğim</label>
+    </div>
+    <div class="flex items-center justify-between mb-4">
+      <label class="flex items-center gap-1.5 text-xs text-violet-500 dark:text-violet-300"><input type="checkbox" data-chart-toggle="alternateDirection" ${c.alternateDirection ? 'checked' : ''}> Her sırada yönü değiştir (git-gel)</label>
+    </div>
+
+    <div class="mb-4 p-3 rounded-xl bg-violet-100/60 dark:bg-violet-900/20 border border-violet-200 dark:border-violet-900/40">
+      <div class="text-xs font-semibold text-violet-500 dark:text-violet-300 mb-1">📐 Gauge Düzeltmesi (opsiyonel)</div>
+      <p class="text-[11px] text-violet-400 dark:text-violet-400 mb-2">İlmekler kare değildir. Küçük bir prova örüp cetvelle ölçün: 10 ilmek kaç mm eninde, 10 sıra kaç mm yüksekliğinde? (Bulduğunuz sayıyı 10'a bölüp tek ilmek/sıra ölçüsünü girin.) Kareden farklıysa şema, gerçek piksel konumları örneklenerek yeniden boyutlandırılır — sayılar tahmin edilmez.</p>
+      <div class="flex gap-2 mb-2">
+        <div class="flex-1">
+          <label class="text-[10px] text-violet-400">1 İlmek Eni (mm)</label>
+          <input id="f_stitchWidth" type="number" step="0.1" min="0" value="${c.stitchWidthMm || ''}" class="mt-1 w-full rounded-lg border border-violet-100 dark:border-violet-800 bg-white dark:bg-[#211d2e] px-2 py-1.5 text-xs dark:text-violet-50" placeholder="Örn: 6.5">
+        </div>
+        <div class="flex-1">
+          <label class="text-[10px] text-violet-400">1 Sıra Yüksekliği (mm)</label>
+          <input id="f_rowHeight" type="number" step="0.1" min="0" value="${c.rowHeightMm || ''}" class="mt-1 w-full rounded-lg border border-violet-100 dark:border-violet-800 bg-white dark:bg-[#211d2e] px-2 py-1.5 text-xs dark:text-violet-50" placeholder="Örn: 5.2">
+        </div>
+      </div>
+      <div class="flex items-center gap-3 mb-2 text-[11px] text-violet-500 dark:text-violet-300">
+        <label class="flex items-center gap-1"><input type="radio" name="gaugeAxis" data-chart-radio="gaugeFixAxis" value="width" ${c.gaugeFixAxis !== 'height' ? 'checked' : ''}> İlmek sayısını ayarla</label>
+        <label class="flex items-center gap-1"><input type="radio" name="gaugeAxis" data-chart-radio="gaugeFixAxis" value="height" ${c.gaugeFixAxis === 'height' ? 'checked' : ''}> Sıra sayısını ayarla</label>
+      </div>
+      <button data-action="apply-gauge-fix" class="w-full rounded-lg bg-violet-500 text-white text-xs font-bold py-2">Ölçülerime Göre Şemayı Düzelt</button>
+      ${c.originalGrid ? `<button data-action="revert-gauge-fix" class="w-full mt-2 rounded-lg border border-violet-200 dark:border-violet-800 text-violet-500 dark:text-violet-300 text-xs font-bold py-2">Orijinal Şemaya Geri Dön (${c.originalWidth} ilmek × ${c.originalHeight} ${rowWord(project).toLowerCase()})</button>` : ''}
+      <div class="mt-3">
+        <div class="text-[10px] text-violet-400 dark:text-violet-400 mb-1">Canlı önizleme — şu an ${c.width} ilmek × ${c.height} ${rowWord(project).toLowerCase()}${c.originalGrid ? ` (orijinali ${c.originalWidth}×${c.originalHeight})` : ''}</div>
+        <canvas id="chartPreviewCanvas" class="block w-full h-auto rounded-lg border border-violet-200 dark:border-violet-800" style="image-rendering:pixelated;"></canvas>
+      </div>
+    </div>
+
+    <div class="text-xs text-violet-400 dark:text-violet-400 mb-2">${c.legend.length} renk — swatch veya ismi düzenleyebilirsin</div>
+    <div class="space-y-2">
+      ${c.legend.map(l => `
+      <div class="flex items-center gap-2 bg-white dark:bg-[#211d2e] rounded-lg p-2 border border-violet-100 dark:border-violet-900/30">
+        <input data-legend-field="hex" data-legend-code="${escapeAttr(l.code)}" type="color" value="${escapeAttr(l.hex)}" class="w-8 h-8 shrink-0 rounded border border-violet-100 dark:border-violet-800 p-0">
+        <input data-legend-field="label" data-legend-code="${escapeAttr(l.code)}" type="text" value="${escapeAttr(l.label)}" class="flex-1 min-w-0 text-xs rounded border border-violet-100 dark:border-violet-800 bg-violet-50 dark:bg-[#17151f] px-2 py-1.5 dark:text-violet-50">
+        <span class="text-[10px] text-violet-400 dark:text-violet-400 shrink-0 w-16 text-right">${totals[l.code] || 0} ilmek</span>
+      </div>`).join('')}
+    </div>
+  </div>`;
+}
+function renderNotesTab(project){
+  return `
+  <div class="px-4 py-3 pb-10">
+    <div class="flex items-center justify-between mb-2">
+      <label class="text-sm font-medium text-violet-500 dark:text-violet-300">Notlarım</label>
+      <span id="notesStatus" class="text-xs text-violet-300 dark:text-violet-500"></span>
+    </div>
+    <textarea id="notesInput" rows="10" placeholder="Örn: 3. yumak bitti, 5. sıradan devam ediyorum, iğne numarasını değiştirdim..." class="w-full rounded-2xl border border-violet-100 dark:border-violet-900/40 bg-white dark:bg-[#211d2e] p-4 text-sm text-slate-700 dark:text-violet-100 focus:outline-none focus:ring-2 focus:ring-violet-300 resize-none">${escapeHtml(project.notes || '')}</textarea>
+  </div>`;
+}
+function renderProjectView(project){
+  let content = '';
+  if(state.projectTab === 'counter') content = renderCounterTab(project);
+  else if(state.projectTab === 'plan') content = renderPlanTab(project);
+  else if(state.projectTab === 'legend') content = renderLegendTab(project);
+  else content = renderNotesTab(project);
+  return `<div class="max-w-md mx-auto min-h-screen">${renderTopBar(project)}${content}</div>`;
+}
+
+/* ============================== RENDER: MODALS ============================== */
+function renderRowEditRow(r, i){
+  return `
+  <div class="flex items-center gap-1.5 bg-white dark:bg-[#211d2e] rounded-lg p-2 border border-violet-100 dark:border-violet-900/30">
+    <input data-row-field="row" data-row-index="${i}" type="number" value="${r.row}" class="w-11 text-xs text-center rounded border border-violet-100 dark:border-violet-800 bg-violet-50 dark:bg-[#17151f] py-1 dark:text-violet-50">
+    <input data-row-field="hex" data-row-index="${i}" type="color" value="${escapeAttr(r.hex || '#D8CDEF')}" class="w-8 h-8 shrink-0 rounded border border-violet-100 dark:border-violet-800 p-0">
+    <input data-row-field="color" data-row-index="${i}" type="text" value="${escapeAttr(r.color)}" placeholder="Renk" class="flex-1 min-w-0 text-xs rounded border border-violet-100 dark:border-violet-800 bg-violet-50 dark:bg-[#17151f] px-2 py-1.5 dark:text-violet-50">
+    <input data-row-field="stitches" data-row-index="${i}" type="number" value="${r.stitches}" placeholder="İlmek" class="w-14 text-xs text-center rounded border border-violet-100 dark:border-violet-800 bg-violet-50 dark:bg-[#17151f] py-1.5 dark:text-violet-50">
+    <button data-action="remove-row" data-index="${i}" class="text-rose-300 text-sm px-1 shrink-0">✕</button>
+  </div>`;
+}
+function renderEditProjectModal(m){
+  const d = m.draft;
+  return `
+  <div class="p-5">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-lg font-bold text-slate-800 dark:text-violet-50">${m.isNew ? 'Yeni Proje' : 'Projeyi Düzenle'}</h2>
+      <button data-action="close-modal" class="w-8 h-8 rounded-full flex items-center justify-center text-violet-400">✕</button>
+    </div>
+    <div class="space-y-3">
+      <div>
+        <label class="text-xs font-semibold text-violet-400">Proje Adı</label>
+        <input id="f_name" type="text" value="${escapeAttr(d.name)}" class="mt-1 w-full rounded-xl border border-violet-100 dark:border-violet-900/40 bg-white dark:bg-[#211d2e] px-3 py-2.5 text-sm dark:text-violet-50" placeholder="Örn: Bebek Battaniyesi">
+      </div>
+      <div>
+        <label class="text-xs font-semibold text-violet-400">Desen Adı</label>
+        <input id="f_pattern" type="text" value="${escapeAttr(d.pattern)}" class="mt-1 w-full rounded-xl border border-violet-100 dark:border-violet-900/40 bg-white dark:bg-[#211d2e] px-3 py-2.5 text-sm dark:text-violet-50" placeholder="Örn: Granny Square">
+      </div>
+      <div class="flex gap-3">
+        <div class="flex-1">
+          <label class="text-xs font-semibold text-violet-400">Tür</label>
+          <select id="f_craft" class="mt-1 w-full rounded-xl border border-violet-100 dark:border-violet-900/40 bg-white dark:bg-[#211d2e] px-3 py-2.5 text-sm dark:text-violet-50">
+            <option value="knitting" ${d.craft === 'knitting' ? 'selected' : ''}>Örgü (Şiş)</option>
+            <option value="crochet" ${d.craft === 'crochet' ? 'selected' : ''}>Tığ İşi</option>
+          </select>
+        </div>
+        <div class="flex-1">
+          <label class="text-xs font-semibold text-violet-400">Şiş / Tığ No</label>
+          <input id="f_hook" type="text" value="${escapeAttr(d.hookSize)}" class="mt-1 w-full rounded-xl border border-violet-100 dark:border-violet-900/40 bg-white dark:bg-[#211d2e] px-3 py-2.5 text-sm dark:text-violet-50" placeholder="Örn: 4.0mm">
+        </div>
+      </div>
+      <div>
+        <label class="text-xs font-semibold text-violet-400">Toplam Sıra / Tur (opsiyonel)</label>
+        <input id="f_total" type="number" min="0" value="${d.totalRows || ''}" class="mt-1 w-full rounded-xl border border-violet-100 dark:border-violet-900/40 bg-white dark:bg-[#211d2e] px-3 py-2.5 text-sm dark:text-violet-50" placeholder="Boş bırakırsan serbest sayaç olur">
+      </div>
+    </div>
+
+    <div class="mt-5">
+      <div class="flex items-center justify-between mb-2">
+        <label class="text-xs font-semibold text-violet-400">${d.mode === 'chart' ? 'Piksel Şema' : 'Sıra Planı (Renk & İlmek)'}</label>
+      </div>
+      ${d.mode === 'chart' && d.chart ? `
+      <div class="p-3 rounded-xl bg-violet-100/60 dark:bg-violet-900/20 border border-violet-200 dark:border-violet-900/40 text-sm text-violet-600 dark:text-violet-300">
+        ✅ ${d.chart.height} ${rowWord(d).toLowerCase()} × ${d.chart.width} ilmek · ${d.chart.legend.length} renk yüklendi
+      </div>
+      <div class="flex gap-2 mt-2">
+        <button data-action="upload-excel" class="flex-1 rounded-lg border border-violet-200 dark:border-violet-800 text-violet-500 dark:text-violet-300 text-xs font-bold py-2">📁 Farklı Dosya Yükle</button>
+        <button data-action="clear-chart" class="flex-1 rounded-lg border border-rose-200 dark:border-rose-900/40 text-rose-400 text-xs font-bold py-2">Şemayı Kaldır</button>
+      </div>
+      <p class="text-[11px] text-violet-400 dark:text-violet-400 mt-2">Renkleri ve öreceğin yönü, projeyi açtıktan sonra <b>Lejant</b> sekmesinden düzenleyebilirsin.</p>
+      ` : `
+      <div class="flex gap-2 mb-3">
+        <button data-action="upload-excel" class="flex-1 rounded-lg border border-violet-200 dark:border-violet-800 text-violet-500 dark:text-violet-300 text-xs font-bold py-2">📁 Excel Dosyası Yükle</button>
+        <button data-action="toggle-paste" class="flex-1 rounded-lg border border-violet-200 dark:border-violet-800 text-violet-500 dark:text-violet-300 text-xs font-bold py-2">📋 Metin Yapıştır</button>
+      </div>
+      ${m.showPaste ? `
+      <div class="mb-3 p-3 rounded-xl bg-violet-100/60 dark:bg-violet-900/20 border border-violet-200 dark:border-violet-900/40">
+        <p class="text-[11px] text-violet-500 dark:text-violet-300 mb-2">Excel'de <b>Sıra, Renk, İlmek, Not</b> sütunlarını seçip kopyala (Ctrl+C), aşağıya yapıştır (Ctrl+V).</p>
+        <textarea id="f_paste" rows="4" class="w-full rounded-lg border border-violet-200 dark:border-violet-800 bg-white dark:bg-[#211d2e] px-2 py-2 text-xs font-mono dark:text-violet-50" placeholder="1	Krem	60	Başlangıç"></textarea>
+        <button data-action="parse-pasted-rows" class="mt-2 w-full rounded-lg bg-violet-500 text-white text-xs font-bold py-2">Ayrıştır ve Listeye Ekle</button>
+      </div>` : ''}
+      <div class="space-y-2 max-h-56 overflow-y-auto pr-1">
+        ${d.rows.length ? d.rows.map((r, i) => renderRowEditRow(r, i)).join('') : `<div class="text-xs text-violet-300 text-center py-3">Henüz sıra eklenmedi</div>`}
+      </div>
+      <button data-action="add-row" class="mt-2 w-full rounded-xl border border-dashed border-violet-300 dark:border-violet-700 text-violet-500 dark:text-violet-300 text-xs font-bold py-2">+ Sıra Ekle</button>
+      `}
+    </div>
+
+    <div class="mt-6 flex gap-3">
+      <button data-action="close-modal" class="flex-1 rounded-xl border border-violet-200 dark:border-violet-800 text-violet-500 dark:text-violet-300 font-bold py-3 text-sm">Vazgeç</button>
+      <button data-action="save-project-form" class="flex-1 rounded-xl bg-violet-500 text-white font-bold py-3 text-sm shadow-md">${m.isNew ? 'Oluştur' : 'Kaydet'}</button>
+    </div>
+    ${!m.isNew ? `
+    <button data-longpress="delete-project:${d.id}" class="relative mt-3 w-full rounded-xl border border-rose-200 dark:border-rose-900/40 text-rose-400 font-semibold py-2.5 text-xs overflow-hidden">
+      <span class="longpress-fill absolute inset-0 bg-rose-100 dark:bg-rose-900/40"></span>
+      <span class="relative z-10">🗑 Projeyi Sil (basılı tutun)</span>
+    </button>` : ''}
+  </div>`;
+}
+function renderSettingsModal(){
+  return `
+  <div class="p-5">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-lg font-bold text-slate-800 dark:text-violet-50">Ayarlar</h2>
+      <button data-action="close-modal" class="w-8 h-8 rounded-full flex items-center justify-center text-violet-400">✕</button>
+    </div>
+    ${state.installAvailable
+      ? `<button data-action="install-app" class="w-full mb-3 rounded-xl bg-violet-500 text-white font-bold py-3 text-sm">📲 Uygulamayı Ana Ekrana Yükle</button>`
+      : `<div class="mb-3 p-3 rounded-xl bg-violet-100/60 dark:bg-violet-900/20 text-xs text-violet-500 dark:text-violet-300">📲 iPhone'da yüklemek için: Safari paylaş simgesi → "Ana Ekrana Ekle"</div>`}
+    <div class="space-y-2">
+      <button data-action="export-data" class="w-full rounded-xl border border-violet-200 dark:border-violet-800 text-violet-600 dark:text-violet-300 font-semibold py-3 text-sm">⬇️ Verileri Dışa Aktar (Yedek)</button>
+      <button data-action="import-data" class="w-full rounded-xl border border-violet-200 dark:border-violet-800 text-violet-600 dark:text-violet-300 font-semibold py-3 text-sm">⬆️ Yedekten İçe Aktar</button>
+    </div>
+    <button data-longpress="reset-all" class="relative w-full mt-4 rounded-xl border border-rose-200 dark:border-rose-900/40 text-rose-400 font-semibold py-3 text-sm overflow-hidden">
+      <span class="longpress-fill absolute inset-0 bg-rose-100 dark:bg-rose-900/40"></span>
+      <span class="relative z-10">🗑 Tüm Verileri Sıfırla (basılı tutun)</span>
+    </button>
+    <p class="text-[11px] text-violet-300 dark:text-violet-500 mt-4 text-center">Örgü Takip v1.0 · Tüm verileriniz sadece bu cihazda saklanır.</p>
+  </div>`;
+}
+function renderModal(){
+  const m = state.modal;
+  if(!m) return '';
+  let inner = '';
+  if(m.type === 'editProject') inner = renderEditProjectModal(m);
+  else if(m.type === 'settings') inner = renderSettingsModal();
+  return `
+  <div class="fixed inset-0 z-40 flex items-end sm:items-center justify-center">
+    <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" data-action="close-modal"></div>
+    <div class="relative w-full sm:max-w-md bg-violet-50 dark:bg-[#1b1826] rounded-t-3xl sm:rounded-3xl max-h-[92vh] overflow-y-auto shadow-xl">
+      ${inner}
+    </div>
+  </div>`;
+}
+
+/* ============================== RENDER ROOT ============================== */
+let tickerInterval = null;
+function refreshTicker(){
+  if(tickerInterval){ clearInterval(tickerInterval); tickerInterval = null; }
+  const p = getActiveProject();
+  if(state.view === 'project' && p && p.timerRunning){
+    tickerInterval = setInterval(() => {
+      const el = document.getElementById('timerDisplay');
+      if(el) el.textContent = formatTime(computeElapsed(p));
+    }, 1000);
+  }
+}
+function updateThemeColorMeta(){
+  document.documentElement.classList.toggle('dark', state.darkMode);
+}
+function render(){
+  updateThemeColorMeta();
+  const app = document.getElementById('app');
+  const project = getActiveProject();
+  app.innerHTML = (state.view === 'project' && project) ? renderProjectView(project) : renderDashboard();
+  document.getElementById('modalRoot').innerHTML = renderModal();
+  bindDynamic();
+  refreshTicker();
+  if(project && project.mode === 'chart' && state.view === 'project') drawChartPreview(project);
+}
+function bindDynamic(){
+  document.querySelectorAll('[data-longpress]').forEach(el => bindLongPress(el, () => dispatchLongpress(el.dataset.longpress)));
+}
+
+/* ============================== GLOBAL EVENT DELEGATION ============================== */
+let notesSaveTimer = null;
+let chartSaveTimer = null;
+document.body.addEventListener('click', (e) => {
+  const el = e.target.closest('[data-action]');
+  if(!el) return;
+  const action = el.dataset.action;
+  const id = el.dataset.id;
+  switch(action){
+    case 'open-project': state.view = 'project'; state.activeProjectId = id; state.projectTab = 'counter'; render(); break;
+    case 'back-to-dashboard': commitRunningTimers(); state.view = 'dashboard'; state.activeProjectId = null; save(); render(); break;
+    case 'new-project': openNewProjectModal(); break;
+    case 'edit-project': openEditProjectModal(id); break;
+    case 'toggle-dark': state.darkMode = !state.darkMode; save(); render(); break;
+    case 'open-settings': state.modal = { type: 'settings' }; render(); break;
+    case 'close-modal': state.modal = null; render(); break;
+    case 'save-project-form': saveProjectForm(); break;
+    case 'toggle-paste': state.modal.showPaste = !state.modal.showPaste; render(); break;
+    case 'parse-pasted-rows': parsePastedRowsAction(); break;
+    case 'upload-excel': document.getElementById('excelFileInput').click(); break;
+    case 'add-row': {
+      const rows = state.modal.draft.rows;
+      const nextRowNum = rows.length ? Math.max(...rows.map(r => r.row)) + 1 : 1;
+      rows.push({ row: nextRowNum, color: '', hex: '#D8CDEF', stitches: 0, note: '' });
+      render();
+      break;
+    }
+    case 'remove-row': state.modal.draft.rows.splice(parseInt(el.dataset.index, 10), 1); render(); break;
+    case 'clear-chart': delete state.modal.draft.chart; state.modal.draft.mode = 'simple'; render(); break;
+    case 'apply-gauge-fix': handleApplyGaugeFix(); break;
+    case 'revert-gauge-fix': handleRevertGaugeFix(); break;
+    case 'tab-counter': state.projectTab = 'counter'; render(); break;
+    case 'tab-plan': state.projectTab = 'plan'; render(); break;
+    case 'tab-legend': state.projectTab = 'legend'; render(); break;
+    case 'tab-notes': state.projectTab = 'notes'; render(); break;
+    case 'counter-inc': handleCounterInc(); break;
+    case 'counter-dec': handleCounterDec(); break;
+    case 'repeat-inc': handleRepeatInc(); break;
+    case 'repeat-dec': handleRepeatDec(); break;
+    case 'block-next': handleBlockNext(); break;
+    case 'block-prev': handleBlockPrev(); break;
+    case 'jump-to-row': handleJumpToRow(parseInt(el.dataset.row, 10)); break;
+    case 'timer-toggle': handleTimerToggle(); break;
+    case 'toggle-wakelock': handleToggleWakelock(); break;
+    case 'toggle-lock': handleToggleLockTap(id); break;
+    case 'export-data': downloadExport(); break;
+    case 'import-data': document.getElementById('importFileInput').click(); break;
+    case 'install-app': handleInstallApp(); break;
+  }
+});
+document.body.addEventListener('keydown', (e) => {
+  if(e.key !== 'Enter' && e.key !== ' ') return;
+  const el = e.target.closest('[data-action]');
+  if(el){ e.preventDefault(); el.click(); }
+});
+document.body.addEventListener('input', (e) => {
+  const rowField = e.target.closest('[data-row-field]');
+  if(rowField && state.modal && state.modal.draft){
+    const idx = parseInt(rowField.dataset.rowIndex, 10);
+    const field = rowField.dataset.rowField;
+    let val = rowField.value;
+    if(field === 'row' || field === 'stitches') val = parseInt(val, 10) || 0;
+    state.modal.draft.rows[idx][field] = val;
+    return;
+  }
+  if(state.modal && state.modal.draft){
+    const d = state.modal.draft;
+    if(e.target.id === 'f_name'){ d.name = e.target.value; return; }
+    if(e.target.id === 'f_pattern'){ d.pattern = e.target.value; return; }
+    if(e.target.id === 'f_hook'){ d.hookSize = e.target.value; return; }
+    if(e.target.id === 'f_total'){ d.totalRows = parseInt(e.target.value, 10) || 0; return; }
+  }
+  if(e.target.id === 'notesInput'){
+    const p = getActiveProject();
+    if(!p) return;
+    p.notes = e.target.value;
+    p.updatedAt = Date.now();
+    const statusEl = document.getElementById('notesStatus');
+    if(statusEl) statusEl.textContent = 'Kaydediliyor…';
+    clearTimeout(notesSaveTimer);
+    notesSaveTimer = setTimeout(() => {
+      save();
+      const s = document.getElementById('notesStatus');
+      if(s) s.textContent = 'Kaydedildi ✓';
+    }, 700);
+    return;
+  }
+  const legendField = e.target.closest('[data-legend-field]');
+  if(legendField){
+    const p = getActiveProject();
+    if(!p || !p.chart) return;
+    const entry = p.chart.legend.find(l => l.code === legendField.dataset.legendCode);
+    if(entry){
+      entry[legendField.dataset.legendField] = legendField.value;
+      p.updatedAt = Date.now();
+      clearTimeout(chartSaveTimer);
+      chartSaveTimer = setTimeout(save, 500);
+    }
+    return;
+  }
+  if(e.target.id === 'f_stitchWidth' || e.target.id === 'f_rowHeight'){
+    const p = getActiveProject();
+    if(!p || !p.chart) return;
+    if(e.target.id === 'f_stitchWidth') p.chart.stitchWidthMm = parseFloat(e.target.value) || 0;
+    else p.chart.rowHeightMm = parseFloat(e.target.value) || 0;
+    p.updatedAt = Date.now();
+    clearTimeout(chartSaveTimer);
+    chartSaveTimer = setTimeout(save, 500);
+  }
+});
+document.body.addEventListener('change', (e) => {
+  if(e.target.id === 'f_craft' && state.modal && state.modal.draft){ state.modal.draft.craft = e.target.value; return; }
+  const toggle = e.target.closest('[data-chart-toggle]');
+  if(toggle){
+    const p = getActiveProject();
+    if(!p || !p.chart) return;
+    p.chart[toggle.dataset.chartToggle] = toggle.checked;
+    p.updatedAt = Date.now();
+    save(); render();
+    return;
+  }
+  const radio = e.target.closest('[data-chart-radio]');
+  if(radio){
+    const p = getActiveProject();
+    if(!p || !p.chart) return;
+    p.chart[radio.dataset.chartRadio] = radio.value;
+    p.updatedAt = Date.now();
+    save(); render();
+  }
+});
+document.getElementById('importFileInput').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try{
+      const data = JSON.parse(reader.result);
+      if(!data || !Array.isArray(data.projects)) throw new Error('invalid');
+      const ok = confirm(`${data.projects.length} proje içeren yedek bulundu. Mevcut ${state.projects.length} projenizin üzerine yazılacak. Devam edilsin mi?`);
+      if(ok){
+        state.projects = data.projects;
+        state.modal = null;
+        save(); render();
+        showToast('Veriler içe aktarıldı');
+      }
+    }catch(err){
+      showToast('Dosya okunamadı, geçersiz format');
+    }
+    e.target.value = '';
+  };
+  reader.readAsText(file);
+});
+
+document.getElementById('excelFileInput').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if(!file || !state.modal || !state.modal.draft) return;
+  parseExcelWorkbook(file).then(result => {
+    if(result.type === 'chart'){
+      if(!result.legend.length){ showToast('Renk lejantı bulunamadı, dosya formatını kontrol edin'); return; }
+      const d = state.modal.draft;
+      d.mode = 'chart';
+      d.chart = {
+        width: result.width, height: result.height, grid: result.grid,
+        legend: result.legend, instructions: result.instructions,
+        bottomToTop: true, alternateDirection: true
+      };
+      d.totalRows = result.height;
+      d.currentRow = Math.min(d.currentRow || 1, result.height) || 1;
+      state.modal.showPaste = false;
+      render();
+      showToast(`Piksel şema yüklendi: ${result.height} ${rowWord(d).toLowerCase()} × ${result.width} ilmek, ${result.legend.length} renk`);
+    } else {
+      applyParsedRowsToDraft(result.rows);
+    }
+  }).catch(() => showToast('Excel dosyası okunamadı, dosya bozuk olabilir'));
+  e.target.value = '';
+});
+
+/* ============================== BOOT ============================== */
+render();
+</script>
+</body>
+</html>
